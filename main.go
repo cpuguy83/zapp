@@ -22,12 +22,7 @@ func main() {
 		err  error
 	)
 
-	if len(os.Args) > 2 {
-		dgst, data, err = FromFile(os.Args[2])
-	} else {
-		fmt.Fprintln(os.Stderr, "reading from stdin")
-		dgst, data, err = FromReader(os.Stdin)
-	}
+	dgst, data, err = FromFile(os.Args[2])
 	if err != nil {
 		panic(err)
 	}

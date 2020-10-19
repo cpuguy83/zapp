@@ -12,20 +12,10 @@ import (
 )
 
 func FromFile(p string) (digest.Digest, []byte, error) {
-	var f io.ReadCloser
-	if p == "-" {
-		f = os.Stdin
-	} else {
-		var err error
-		f, err = os.Open(p)
-		if err != nil {
-			return "", nil, err
-		}
+	f, err := os.Open(p)
+	if err != nil {
+		return "", nil, err
 	}
-	if p != "-" {
-		defer f.Close()
-	}
-
 	return FromReader(f)
 }
 
