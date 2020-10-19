@@ -54,8 +54,13 @@ func main() {
 	}
 
 	w, err := pusher.Push(ctx, desc)
-	if _, err := io.Copy(w, bytes.NewReader(data)); err != nil {
+	n, err := io.Copy(w, bytes.NewReader(data))
+	if err != nil {
 		errOut(err)
+	}
+
+	if n != int64(len(data)) {
+		errOut(fmt.Errorf("unexpected manifest size uploaded, expected: %d, got: %d", len(data), n))
 	}
 }
 
