@@ -24,5 +24,7 @@ func FromReader(r io.Reader) (digest.Digest, []byte, error) {
 	buf := bytes.NewBuffer(nil)
 	r = io.TeeReader(io.TeeReader(r, buf), h)
 
-	return digest.FromBytes(h.Sum(nil)), buf.Bytes(), json.NewDecoder(r).Decode(&v1.Manifest{})
+	err := json.NewDecoder(r).Decode(&v1.Manifest{})
+
+	return digest.FromBytes(h.Sum(nil)), buf.Bytes(), err
 }

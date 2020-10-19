@@ -26,6 +26,11 @@ func main() {
 		errOut(err)
 	}
 
+	fmt.Fprintln(os.Stderr, "Digest:", dgst.String())
+	fmt.Fprintln(os.Stderr, "Size:", len(data))
+	fmt.Fprintln(os.Stderr, "Manifest:")
+	fmt.Fprintln(os.Stderr, string(data))
+
 	var credsFunc func(string) (string, string, error)
 	if terminal.IsTerminal(syscall.Stdin) {
 		credsFunc = terminalCreds
