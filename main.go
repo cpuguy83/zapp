@@ -59,6 +59,9 @@ func main() {
 	}
 
 	w, err := pusher.Push(ctx, desc)
+	if err != nil {
+		errOut(err)
+	}
 	n, err := io.Copy(w, bytes.NewReader(data))
 	if err != nil {
 		errOut(err)
@@ -66,6 +69,10 @@ func main() {
 
 	if n != int64(len(data)) {
 		errOut(fmt.Errorf("unexpected manifest size uploaded, expected: %d, got: %d", len(data), n))
+	}
+
+	if err := w.Commit(ctx, desc.Size, desc.Digest); err != nil {
+		errOut(err)
 	}
 }
 
