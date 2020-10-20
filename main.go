@@ -59,17 +59,17 @@ func main() {
 		errOut(err)
 	}
 
-	_, err = io.Copy(w, rdr)
+	n, err := io.Copy(w, rdr)
 	if err != nil {
 		errOut(err)
 	}
 
 	dgst := digest.FromBytes(h.Sum(nil))
-	if err := w.Commit(ctx, desc.Size, dgst); err != nil {
+	if err := w.Commit(ctx, n, dgst); err != nil {
 		errOut(err)
 	}
 
 	fmt.Println("Type:", desc.MediaType)
-	fmt.Println("Size:", desc.Size)
+	fmt.Println("Size:", n)
 	fmt.Println("Digest:", dgst.String())
 }
