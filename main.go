@@ -65,11 +65,11 @@ func main() {
 	}
 
 	dgst := digest.FromBytes(h.Sum(nil))
-	if err := w.Commit(ctx, n, dgst); err != nil {
-		errOut(err)
-	}
-
 	fmt.Println("Type:", desc.MediaType)
 	fmt.Println("Size:", n)
 	fmt.Println("Digest:", dgst.String())
+
+	if err := w.Commit(ctx, n, dgst); err != nil {
+		errOut(err)
+	}
 }
