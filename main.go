@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"errors"
+	"flag"
 	"fmt"
 	"io"
 	"os"
@@ -14,17 +15,23 @@ import (
 	"golang.org/x/crypto/ssh/terminal"
 )
 
+var (
+	allowHTTP bool
+)
+
 func main() {
-	if len(os.Args) < 3 {
+	flag.BoolVar(&allowHTTP, "allow-http", false, "allow fallback to http")
+	flag.Parse()
+
+	if len(flag.Args()) < 2 {
 		errOut(errors.New("usage: " + filepath.Base(os.Args[0]+" <repo> <file> [<media type>]")))
 	}
 
-	var mt string
-	if len(os.Args) == 4 {
-		mt = os.Args[3]
-	}
+	ref := flag.Arg(0)
+	fileName := flag.Arg(1)
+	mt := flag.Arg(2)
 
-	f, desc, err := FromFile(os.Args[2], mt)
+	f, desc, err := FromFile(fileName, mt)
 	if err != nil {
 		errOut(err)
 	}
@@ -39,7 +46,6 @@ func main() {
 
 	ctx := context.Background()
 
-	ref := os.Args[1]
 	pusher, err := resolver.Pusher(ctx, ref)
 	if err != nil {
 		errOut(err)

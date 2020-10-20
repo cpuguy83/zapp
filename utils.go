@@ -51,6 +51,9 @@ func terminalCreds(host string) (string, string, error) {
 func getResolver(credsFunc func(string) (string, string, error)) remotes.Resolver {
 	return docker.NewResolver(docker.ResolverOptions{
 		Hosts: docker.ConfigureDefaultRegistries(
+			docker.WithPlainHTTP(func(string) (bool, error) {
+				return allowHTTP, nil
+			}),
 			docker.WithAuthorizer(docker.NewDockerAuthorizer(
 				docker.WithAuthCreds(credsFunc),
 			)),
