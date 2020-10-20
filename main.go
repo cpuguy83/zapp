@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"syscall"
 
+	"github.com/containerd/containerd/content"
 	"github.com/opencontainers/go-digest"
 	"golang.org/x/crypto/ssh/terminal"
 )
@@ -59,17 +60,12 @@ func main() {
 		errOut(err)
 	}
 
-	n, err := io.Copy(w, rdr)
-	if err != nil {
+	if err := content.Copy(ctx, w, rdr, desc.Size, desc.Digest); err != nil {
 		errOut(err)
 	}
 
 	dgst := digest.FromBytes(h.Sum(nil))
 	fmt.Println("Type:", desc.MediaType)
-	fmt.Println("Size:", n)
+	fmt.Println("Size:", desc.Size)
 	fmt.Println("Digest:", dgst.String())
-
-	if err := w.Commit(ctx, n, dgst); err != nil {
-		errOut(err)
-	}
 }
