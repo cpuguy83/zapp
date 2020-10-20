@@ -1,48 +1,40 @@
 package main
 
 import (
-	"bufio"
-	"bytes"
 	"context"
+	"crypto/sha256"
 	"errors"
-	"fmt"
 	"io"
 	"os"
 	"path/filepath"
-	"runtime"
 	"syscall"
 
-	"github.com/containerd/containerd/remotes/docker"
-	v1 "github.com/opencontainers/image-spec/specs-go/v1"
+	"github.com/opencontainers/go-digest"
 	"golang.org/x/crypto/ssh/terminal"
 )
 
 func main() {
 	if len(os.Args) < 3 {
-		errOut(errors.New("usage: " + filepath.Base(os.Args[0]+" <repo> <manifest.json>")))
+		errOut(errors.New("usage: " + filepath.Base(os.Args[0]+" <repo> <file> [<media type>]")))
 	}
-	dgst, data, err := FromFile(os.Args[2])
+
+	var mt string
+	if len(os.Args) == 4 {
+		mt = os.Args[3]
+	}
+
+	f, desc, err := FromFile(os.Args[2], mt)
 	if err != nil {
 		errOut(err)
 	}
-
-	fmt.Fprintln(os.Stderr, "Digest:", dgst.String())
-	fmt.Fprintln(os.Stderr, "Size:", len(data))
-	fmt.Fprintln(os.Stderr, "Manifest:")
-	fmt.Fprintln(os.Stderr, string(data))
+	defer f.Close()
 
 	var credsFunc func(string) (string, string, error)
 	if terminal.IsTerminal(syscall.Stdin) {
 		credsFunc = terminalCreds
 	}
 
-	resolver := docker.NewResolver(docker.ResolverOptions{
-		Hosts: docker.ConfigureDefaultRegistries(
-			docker.WithAuthorizer(docker.NewDockerAuthorizer(
-				docker.WithAuthCreds(credsFunc),
-			)),
-		),
-	})
+	resolver := getResolver(credsFunc)
 
 	ctx := context.Background()
 
@@ -52,59 +44,20 @@ func main() {
 		errOut(err)
 	}
 
-	desc := v1.Descriptor{
-		MediaType: v1.MediaTypeImageManifest,
-		Digest:    dgst,
-		Size:      int64(len(data)),
-	}
+	h := sha256.New()
+	rdr := io.TeeReader(f, h)
 
 	w, err := pusher.Push(ctx, desc)
 	if err != nil {
 		errOut(err)
 	}
-	n, err := io.Copy(w, bytes.NewReader(data))
+
+	_, err = io.Copy(w, rdr)
 	if err != nil {
 		errOut(err)
 	}
 
-	if n != int64(len(data)) {
-		errOut(fmt.Errorf("unexpected manifest size uploaded, expected: %d, got: %d", len(data), n))
-	}
-
-	if err := w.Commit(ctx, desc.Size, desc.Digest); err != nil {
+	if err := w.Commit(ctx, desc.Size, digest.FromBytes(h.Sum(nil))); err != nil {
 		errOut(err)
 	}
-}
-
-func errOut(err error) {
-	if err == nil {
-		return
-	}
-
-	_, f, l, _ := runtime.Caller(1)
-	if wd, err := os.Getwd(); err == nil {
-		if rel, err := filepath.Rel(filepath.Dir(f), wd); err == nil {
-			f = filepath.Join(rel, filepath.Base(f))
-		}
-	}
-	fmt.Fprintf(os.Stderr, "%s:%d %s\n", f, l, err.Error())
-	os.Exit(1)
-}
-
-func terminalCreds(host string) (string, string, error) {
-	fmt.Fprintf(os.Stderr, "Username: ")
-
-	stdin := bufio.NewReader(os.Stdin)
-	user, _, err := stdin.ReadLine()
-	if err != nil {
-		return "", "", err
-	}
-
-	fmt.Fprintf(os.Stderr, "Password: ")
-	pass, err := terminal.ReadPassword(int(syscall.Stdin))
-	if err != nil {
-		return "", "", err
-	}
-
-	return string(user), string(pass), nil
 }
