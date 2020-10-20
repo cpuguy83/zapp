@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -57,7 +58,12 @@ func main() {
 		errOut(err)
 	}
 
-	if err := w.Commit(ctx, desc.Size, digest.FromBytes(h.Sum(nil))); err != nil {
+	dgst := digest.FromBytes(h.Sum(nil))
+	if err := w.Commit(ctx, desc.Size, dgst); err != nil {
 		errOut(err)
 	}
+
+	fmt.Println("Type:", desc.MediaType)
+	fmt.Println("Size:", desc.Size)
+	fmt.Println("Digest:", dgst.String())
 }
