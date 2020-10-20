@@ -53,11 +53,11 @@ func FromFile(p string, mt string) (io.ReadCloser, v1.Descriptor, error) {
 			if err := json.NewDecoder(buffered).Decode(&mt); err != nil || mt.MediaType == "" {
 				return nil, desc, fmt.Errorf("could not determine media type: %w", err)
 			}
-			if _, err := f.Seek(0, io.SeekStart); err != nil {
-				return nil, desc, fmt.Errorf("error seeking to file start after deteching media type: %w", err)
-			}
 
 			desc.MediaType = mt.MediaType
+		}
+		if _, err := f.Seek(0, io.SeekStart); err != nil {
+			return nil, desc, fmt.Errorf("error seeking to file start after deteching media type: %w", err)
 		}
 	}
 
