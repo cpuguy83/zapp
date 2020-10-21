@@ -12,17 +12,30 @@ import (
 	"syscall"
 
 	"github.com/containerd/containerd/content"
+	"github.com/containerd/containerd/log"
 	"github.com/opencontainers/go-digest"
+	"github.com/sirupsen/logrus"
 	"golang.org/x/crypto/ssh/terminal"
 )
 
 var (
 	allowHTTP bool
+	debug     bool
 )
 
 func main() {
 	flag.BoolVar(&allowHTTP, "allow-http", false, "allow fallback to http")
+	flag.BoolVar(&debug, "debug", false, "allow fallback to http")
 	flag.Parse()
+
+	ctx := context.Background()
+
+	if debug {
+		l := logrus.NewEntry(logrus.StandardLogger())
+		l.Logger.SetOutput(os.Stderr)
+		l.Logger.SetLevel(logrus.DebugLevel)
+		ctx = log.WithLogger(ctx, l)
+	}
 
 	if len(flag.Args()) < 2 {
 		errOut(errors.New("usage: " + filepath.Base(os.Args[0]+" <repo> <file> [<media type>]")))
@@ -44,8 +57,6 @@ func main() {
 	}
 
 	resolver := getResolver(credsFunc)
-
-	ctx := context.Background()
 
 	pusher, err := resolver.Pusher(ctx, ref)
 	if err != nil {
