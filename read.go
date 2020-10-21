@@ -7,8 +7,10 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"os"
 
+	"github.com/opencontainers/go-digest"
 	v1 "github.com/opencontainers/image-spec/specs-go/v1"
 )
 
@@ -60,6 +62,15 @@ func FromFile(p string, mt string) (io.ReadCloser, v1.Descriptor, error) {
 			return nil, desc, fmt.Errorf("error seeking to file start after deteching media type: %w", err)
 		}
 	}
+
+	h := digest.Canonical.Digester().Hash()
+	io.Copy(ioutil.Discard, io.TeeReader(f, h))
+
+	if _, err := f.Seek(0, io.SeekStart); err != nil {
+		return nil, desc, fmt.Errorf("error seeking to file start after hashing: %w", err)
+	}
+
+	desc.Digest = digest.NewDigest(digest.Canonical, h)
 
 	return f, desc, err
 }

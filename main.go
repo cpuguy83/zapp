@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"crypto/sha256"
 	"errors"
 	"flag"
 	"fmt"
@@ -11,9 +10,7 @@ import (
 	"path/filepath"
 	"syscall"
 
-	"github.com/containerd/containerd/content"
 	"github.com/containerd/containerd/log"
-	"github.com/opencontainers/go-digest"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/crypto/ssh/terminal"
 )
@@ -58,25 +55,26 @@ func main() {
 
 	resolver := getResolver(credsFunc)
 
+	fmt.Println("Type:", desc.MediaType)
+	fmt.Println("Size:", desc.Size)
+	fmt.Println("Digest:", desc.Digest)
+
 	pusher, err := resolver.Pusher(ctx, ref)
 	if err != nil {
 		errOut(err)
 	}
-
-	h := sha256.New()
-	rdr := io.TeeReader(f, h)
 
 	w, err := pusher.Push(ctx, desc)
 	if err != nil {
 		errOut(err)
 	}
 
-	if err := content.Copy(ctx, w, rdr, desc.Size, desc.Digest); err != nil {
-		errOut(err)
+	buf := make([]byte, 1<<20)
+	if _, err := io.CopyBuffer(w, f, buf); err != nil {
+		errOut(fmt.Errorf("error copying to remote: %w", err))
 	}
 
-	dgst := digest.FromBytes(h.Sum(nil))
-	fmt.Println("Type:", desc.MediaType)
-	fmt.Println("Size:", desc.Size)
-	fmt.Println("Digest:", dgst.String())
+	if err := w.Commit(ctx, desc.Size, desc.Digest); err != nil {
+		errOut(err)
+	}
 }
