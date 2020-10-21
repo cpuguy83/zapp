@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"syscall"
 
+	"github.com/containerd/containerd/errdefs"
 	"github.com/containerd/containerd/log"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/crypto/ssh/terminal"
@@ -66,6 +67,9 @@ func main() {
 
 	w, err := pusher.Push(ctx, desc)
 	if err != nil {
+		if errdefs.IsAlreadyExists(err) {
+			return
+		}
 		errOut(err)
 	}
 

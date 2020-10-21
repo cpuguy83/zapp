@@ -63,6 +63,10 @@ func FromFile(p string, mt string) (io.ReadCloser, v1.Descriptor, error) {
 		}
 	}
 
+	if desc.MediaType == "" {
+		return nil, desc, errors.New("could not determine media type")
+	}
+
 	h := digest.Canonical.Digester().Hash()
 	io.Copy(ioutil.Discard, io.TeeReader(f, h))
 
