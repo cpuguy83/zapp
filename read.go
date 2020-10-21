@@ -47,10 +47,8 @@ func FromFile(p string, mt string) (io.ReadCloser, v1.Descriptor, error) {
 			desc.MediaType = v1.MediaTypeImageLayerGzip
 		default:
 			var mt mediaType
-			if err := json.NewDecoder(buffered).Decode(&mt); err != nil || mt.MediaType == "" {
-				return nil, desc, fmt.Errorf("could not determine media type: %w", err)
-			}
-
+			// ignore errors here, we'll error below if the media type is no good
+			json.NewDecoder(buffered).Decode(&mt)
 			desc.MediaType = mt.MediaType
 		}
 		if _, err := f.Seek(0, io.SeekStart); err != nil {
