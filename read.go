@@ -40,12 +40,7 @@ func FromFile(p string, mt string) (io.ReadCloser, v1.Descriptor, error) {
 
 	if desc.MediaType == "" {
 		buffered := bufio.NewReader(f)
-		header, err := buffered.Peek(10)
-		if err != nil {
-			// Note: Technically this could be that the file isn't even 10B and it could be valid(?)
-			// But this is very unlikely, so just error out
-			return nil, desc, err
-		}
+		header, _ := buffered.Peek(10)
 
 		switch {
 		case DetectCompression(header) == Gzip:
