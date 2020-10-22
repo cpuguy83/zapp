@@ -55,7 +55,7 @@ func main() {
 
 	if fileName == "" {
 		// no file or sha is given, assume this is just a manifest request
-		if err := fetch(ctx, resolver, ref, ""); err != nil {
+		if err := fetch(ctx, resolver, ref, "", mt); err != nil {
 			errOut(err)
 		}
 		return
@@ -74,14 +74,14 @@ func main() {
 		if err2 != nil {
 			errOut(err)
 		}
-		if err := fetch(ctx, resolver, ref, dgst); err != nil {
+		if err := fetch(ctx, resolver, ref, dgst, mt); err != nil {
 			errOut(err)
 		}
 		return
 	}
 }
 
-func fetch(ctx context.Context, resolver remotes.Resolver, ref string, dgst digest.Digest) (retErr error) {
+func fetch(ctx context.Context, resolver remotes.Resolver, ref string, dgst digest.Digest, mt string) (retErr error) {
 	defer func() {
 		if retErr != nil {
 			retErr = fmt.Errorf("fetch: %w", retErr)
@@ -99,31 +99,38 @@ func fetch(ctx context.Context, resolver remotes.Resolver, ref string, dgst dige
 
 	if dgst != "" {
 		desc.Digest = dgst
-		desc.MediaType = ""
+		desc.MediaType = mt
 	}
 
-	rdr, err := fetcher.Fetch(ctx, desc)
-	if err != nil {
-		return fmt.Errorf("error fetching content: %w", err)
-	}
-	defer rdr.Close()
+	for i := 0; i < 2; i++ {
+		rdr, err := fetcher.Fetch(ctx, desc)
+		if err != nil {
+			return fmt.Errorf("error fetching content: %w", err)
+		}
+		defer rdr.Close()
 
-	h := desc.Digest.Algorithm().Digester().Hash()
-	r := io.TeeReader(rdr, h)
+		h := desc.Digest.Algorithm().Digester().Hash()
+		r := io.TeeReader(rdr, h)
 
-	buf := make([]byte, 1<<20)
+		buf := make([]byte, 1<<20)
 
-	_, err = io.CopyBuffer(os.Stdout, r, buf)
-	if err != nil {
-		return fmt.Errorf("error reading content: %w", err)
-	}
+		_, err = io.CopyBuffer(os.Stdout, r, buf)
+		if err != nil {
+			if errdefs.IsNotFound(err) && mt == "" {
+				desc.MediaType = v1.MediaTypeImageManifest
+				continue
+			}
+			return fmt.Errorf("error reading content: %w", err)
+		}
 
-	if err := rdr.Close(); err != nil {
-		return err
-	}
+		if err := rdr.Close(); err != nil {
+			return err
+		}
 
-	if desc.Digest != digest.NewDigest(digest.Canonical, h) {
-		return errors.New("digest mistmatch")
+		if desc.Digest != digest.NewDigest(digest.Canonical, h) {
+			return errors.New("digest mistmatch")
+		}
+		return
 	}
 	return nil
 }
