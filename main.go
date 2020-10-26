@@ -132,13 +132,10 @@ func fetch(ctx context.Context, resolver *resolverWrapper, ref string, dgst dige
 	}
 
 	if mt == "application/vnd.docker.plugin.v1+json" {
-		u, err := url.Parse("dummy://" + ref)
+		scope, err := pluginScope(ref)
 		if err != nil {
-			return fmt.Errorf("could not pasre ref %s: %w", ref, err)
+			return err
 		}
-
-		p := strings.SplitN(u.Path, ":", 2)[0]
-		scope := "repository(plugin):" + strings.TrimPrefix(p, "/") + ":pull"
 		ctx = docker.WithScope(ctx, scope)
 	}
 
@@ -147,7 +144,19 @@ func fetch(ctx context.Context, resolver *resolverWrapper, ref string, dgst dige
 		if errors.Is(err, docker.ErrInvalidAuthorization) {
 			resolver.err = err
 			_, desc, err = resolver.Resolve(ctx, ref)
+
+			if errors.Is(err, docker.ErrInvalidAuthorization) {
+				var scope string
+				scope, err = pluginScope(ref)
+				if err != nil {
+					return err
+				}
+				ctx = docker.WithScope(ctx, scope)
+				_, desc, err = resolver.Resolve(ctx, ref)
+				err = errors.Wrapf(err, "2nd attempt with scope: %s", scope)
+			}
 		}
+
 		if err != nil {
 			return fmt.Errorf("error resolving reference: %w", err)
 		}
@@ -231,4 +240,14 @@ func push(ctx context.Context, resolver *resolverWrapper, ref string, desc v1.De
 type resolverWrapper struct {
 	remotes.Resolver
 	err error
+}
+
+func pluginScope(ref string) (string, error) {
+	u, err := url.Parse("dummy://" + ref)
+	if err != nil {
+		return "", fmt.Errorf("could not pasre ref %s: %w", ref, err)
+	}
+
+	p := strings.SplitN(u.Path, ":", 2)[0]
+	return "repository(plugin):" + strings.TrimPrefix(p, "/") + ":pull", nil
 }
