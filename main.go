@@ -5,14 +5,17 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
 	"syscall"
 
 	"github.com/containerd/containerd/errdefs"
 	"github.com/containerd/containerd/log"
 	"github.com/containerd/containerd/remotes"
 	"github.com/containerd/containerd/remotes/docker"
+	"github.com/cpuguy83/dockercfg"
 	"github.com/opencontainers/go-digest"
 	v1 "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
@@ -47,21 +50,37 @@ func main() {
 	fileName := flag.Arg(1)
 	mt := flag.Arg(2)
 
-	var credsFunc func(string) (string, string, error)
-	if terminal.IsTerminal(syscall.Stdin) {
-		credsFunc = terminalCreds
-	}
-
 	// resolverWrapper is used here so we don't ask the user for creds for things that don't require them
 	// This is a stop-gap to actually reading credentials which may already be present on the system.
 	// Not sending credentials will almost certainly run into throttling limits from DockerHub and potentially other registries.
 	resolver := &resolverWrapper{}
-	resolver.Resolver = getResolver(func(host string) (string, string, error) {
+	resolver.Resolver = getResolver(func(host string) (u string, _ string, _ error) {
+		host = dockercfg.ResolveRegistryHost(host)
+
+		u, p, err := dockercfg.GetRegistryCredentials(host)
+		if err != nil && resolver.err != nil {
+			return "", "", err
+		}
+
+		if p != "" {
+			return u, p, nil
+		}
+
 		if !errors.Is(resolver.err, docker.ErrInvalidAuthorization) {
+			// We don't have creds, so...
+			// We could ask the terminal for creds, but DockerHub likes to ask for creds for all requests...
+			// which we may need to do anyway due to throttling but for now let's just return early and not
+			// bug the user since the request may go through without them.
 			return "", "", nil
 		}
+
+		if !terminal.IsTerminal(syscall.Stdin) {
+			// No other way to get creds here
+			return "", "", nil
+		}
+
 		resolver.err = nil
-		return credsFunc(host)
+		return terminalCreds(host)
 	})
 
 	if fileName == "" {
@@ -119,6 +138,15 @@ func fetch(ctx context.Context, resolver *resolverWrapper, ref string, dgst dige
 	if dgst != "" {
 		desc.Digest = dgst
 		desc.MediaType = mt
+	}
+
+	if mt == "application/vnd.docker.plugin.v1+json" {
+		u, err := url.Parse(ref)
+		if err != nil {
+			return fmt.Errorf("could not pasre ref %s: %w", ref, err)
+		}
+		p := strings.SplitN(u.Path, ":", 2)[0]
+		ctx = docker.WithScope(ctx, "repository(plugin):"+p)
 	}
 
 	for i := 0; i < 2; i++ {
