@@ -63,6 +63,7 @@ func main() {
 		}
 
 		if p != "" {
+			resolver.haveCreds = true
 			return u, p, nil
 		}
 
@@ -143,8 +144,11 @@ func fetch(ctx context.Context, resolver *resolverWrapper, ref string, dgst dige
 	_, desc, err := resolver.Resolve(ctx, ref)
 	if err != nil {
 		if errors.Is(err, docker.ErrInvalidAuthorization) {
-			resolver.err = err
-			_, desc, err = resolver.Resolve(ctx, ref)
+			if !resolver.haveCreds {
+				log.G(ctx).WithError(err).Debug("forcing authorizer to send registry creds")
+				resolver.err = err
+				_, desc, err = resolver.Resolve(ctx, ref)
+			}
 
 			if errors.Is(err, docker.ErrInvalidAuthorization) {
 				var scope string
@@ -152,9 +156,9 @@ func fetch(ctx context.Context, resolver *resolverWrapper, ref string, dgst dige
 				if err != nil {
 					return err
 				}
+				log.G(ctx).WithField("scope", scope).WithError(err).Debug("Attemping again with plugin scope")
 				ctx = docker.WithScope(ctx, scope)
 				_, desc, err = resolver.Resolve(ctx, ref)
-				err = errors.Wrapf(err, "2nd attempt with scope: %s", scope)
 			}
 		}
 
@@ -240,7 +244,8 @@ func push(ctx context.Context, resolver *resolverWrapper, ref string, desc v1.De
 
 type resolverWrapper struct {
 	remotes.Resolver
-	err error
+	haveCreds bool
+	err       error
 }
 
 func pluginScope(ref string) (string, error) {
