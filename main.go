@@ -218,9 +218,7 @@ func push(ctx context.Context, resolver *resolverWrapper, ref string, desc v1.De
 
 	pusher, err := resolver.Pusher(ctx, ref)
 	if err != nil {
-		if err != nil {
-			return fmt.Errorf("error getting pusher: %w", err)
-		}
+		return fmt.Errorf("error getting pusher: %w", err)
 	}
 
 	w, err := pusher.Push(ctx, desc)
@@ -228,7 +226,16 @@ func push(ctx context.Context, resolver *resolverWrapper, ref string, desc v1.De
 		if errdefs.IsAlreadyExists(err) {
 			return nil
 		}
-		return fmt.Errorf("error starting push: %w", err)
+
+		scope, err := pluginScope(ref)
+		if err != nil {
+			return err
+		}
+		ctx = docker.WithScope(ctx, scope)
+		w, err = pusher.Push(ctx, desc)
+		if err != nil {
+			return fmt.Errorf("error starting push: %w", err)
+		}
 	}
 
 	buf := make([]byte, 1<<20)
@@ -255,5 +262,5 @@ func pluginScope(ref string) (string, error) {
 	}
 
 	p := strings.SplitN(u.Path, ":", 2)[0]
-	return "repository(plugin):" + strings.TrimPrefix(p, "/") + ":pull", nil
+	return "repository(plugin):" + strings.TrimPrefix(p, "/") + ":pull,push", nil
 }
