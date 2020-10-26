@@ -107,6 +107,7 @@ func main() {
 			// This is probably a mediatype
 			mt = fileName
 		} else {
+			// Maybe this is a digest, in which case the user is requesting to fetch this specifiy digest from the repository
 			var err2 error
 			dgst, err2 = digest.Parse(fileName)
 			if err2 != nil {
