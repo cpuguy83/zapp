@@ -92,6 +92,7 @@ func main() {
 	}
 
 	f, desc, err := FromFile(fileName, mt)
+	var dgst digest.Digest
 	switch {
 	case err == nil:
 		defer f.Close()
@@ -102,9 +103,15 @@ func main() {
 		}
 		return
 	case os.IsNotExist(err):
-		dgst, err2 := digest.Parse(fileName)
-		if err2 != nil {
-			errOut(err)
+		if strings.Contains(fileName, "application/vnd.") {
+			// This is probably a mediatype
+			mt = fileName
+		} else {
+			var err2 error
+			dgst, err2 = digest.Parse(fileName)
+			if err2 != nil {
+				errOut(err)
+			}
 		}
 		if err := fetch(ctx, resolver, ref, dgst, mt); err != nil {
 			errOut(err)
@@ -124,6 +131,17 @@ func fetch(ctx context.Context, resolver *resolverWrapper, ref string, dgst dige
 		return err
 	}
 
+	if mt == "application/vnd.docker.plugin.v1+json" {
+		u, err := url.Parse("dummy://" + ref)
+		if err != nil {
+			return fmt.Errorf("could not pasre ref %s: %w", ref, err)
+		}
+
+		p := strings.SplitN(u.Path, ":", 2)[0]
+		scope := "repository(plugin):" + strings.TrimPrefix(p, "/") + ":pull"
+		ctx = docker.WithScope(ctx, scope)
+	}
+
 	_, desc, err := resolver.Resolve(ctx, ref)
 	if err != nil {
 		if errors.Is(err, docker.ErrInvalidAuthorization) {
@@ -138,15 +156,6 @@ func fetch(ctx context.Context, resolver *resolverWrapper, ref string, dgst dige
 	if dgst != "" {
 		desc.Digest = dgst
 		desc.MediaType = mt
-	}
-
-	if mt == "application/vnd.docker.plugin.v1+json" {
-		u, err := url.Parse(ref)
-		if err != nil {
-			return fmt.Errorf("could not pasre ref %s: %w", ref, err)
-		}
-		p := strings.SplitN(u.Path, ":", 2)[0]
-		ctx = docker.WithScope(ctx, "repository(plugin):"+p)
 	}
 
 	for i := 0; i < 2; i++ {
