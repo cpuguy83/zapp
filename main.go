@@ -9,7 +9,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"syscall"
 
 	"github.com/containerd/containerd/errdefs"
 	"github.com/containerd/containerd/log"
@@ -50,39 +49,8 @@ func main() {
 	fileName := flag.Arg(1)
 	mt := flag.Arg(2)
 
-	// resolverWrapper is used here so we don't ask the user for creds for things that don't require them
-	// This is a stop-gap to actually reading credentials which may already be present on the system.
-	// Not sending credentials will almost certainly run into throttling limits from DockerHub and potentially other registries.
 	resolver := &resolverWrapper{}
-	resolver.Resolver = getResolver(func(host string) (u string, _ string, _ error) {
-		host = dockercfg.ResolveRegistryHost(host)
-
-		u, p, err := dockercfg.GetRegistryCredentials(host)
-		if err != nil && resolver.err != nil {
-			return "", "", err
-		}
-
-		if p != "" {
-			resolver.haveCreds = true
-			return u, p, nil
-		}
-
-		if !errors.Is(resolver.err, docker.ErrInvalidAuthorization) {
-			// We don't have creds, so...
-			// We could ask the terminal for creds, but DockerHub likes to ask for creds for all requests...
-			// which we may need to do anyway due to throttling but for now let's just return early and not
-			// bug the user since the request may go through without them.
-			return "", "", nil
-		}
-
-		if !terminal.IsTerminal(syscall.Stdin) {
-			// No other way to get creds here
-			return "", "", nil
-		}
-
-		resolver.err = nil
-		return terminalCreds(host)
-	})
+	resolver.Resolver = getResolver(resolver.authorize)
 
 	if fileName == "" {
 		// no file or sha is given, assume this is just a manifest request
@@ -144,7 +112,7 @@ func fetch(ctx context.Context, resolver *resolverWrapper, ref string, dgst dige
 	_, desc, err := resolver.Resolve(ctx, ref)
 	if err != nil {
 		if errors.Is(err, docker.ErrInvalidAuthorization) {
-			if !resolver.haveCreds {
+			if !resolver.haveCreds() {
 				log.G(ctx).WithError(err).Debug("forcing authorizer to send registry creds")
 				resolver.err = err
 				_, desc, err = resolver.Resolve(ctx, ref)
@@ -251,8 +219,56 @@ func push(ctx context.Context, resolver *resolverWrapper, ref string, desc v1.De
 
 type resolverWrapper struct {
 	remotes.Resolver
-	haveCreds bool
-	err       error
+	u, p string
+	err  error
+}
+
+func (r *resolverWrapper) authorize(host string) (string, string, error) {
+	ctx := context.Background()
+	l := log.G(ctx).WithField("host", host)
+
+	if r.haveCreds() {
+		l.Debugf("Using cached credentials")
+		return r.u, r.p, nil
+	}
+
+	host = dockercfg.ResolveRegistryHost(host)
+	l = l.WithField("host.resolved", host)
+
+	u, p, err := dockercfg.GetRegistryCredentials(host)
+	if err != nil && r.err != nil {
+		return "", "", err
+	}
+
+	if p != "" {
+		r.u = u
+		r.p = p
+		return u, p, nil
+	}
+
+	if !errors.Is(r.err, docker.ErrInvalidAuthorization) {
+		// We don't have creds, so...
+		// We could ask the terminal for creds, but DockerHub likes to ask for creds for all requests...
+		// which we may need to do anyway due to throttling but for now let's just return early and not
+		// bug the user since the request may go through without them.
+		l.Debug("No creds available, but this is the first round, so we won't fallback to asking the user for them on the terminal")
+		return "", "", nil
+	}
+
+	if !terminal.IsTerminal(int(os.Stdin.Fd())) {
+		// No other way to get creds here
+		l.Debug("No terminal deteched, we really won't be getting any creds here")
+		return "", "", nil
+	}
+
+	r.err = nil
+	l.Debug("Getting terminal creds")
+	r.u, r.p, err = terminalCreds(host)
+	return r.u, r.p, err
+}
+
+func (r *resolverWrapper) haveCreds() bool {
+	return r.p != ""
 }
 
 func pluginScope(ref string) (string, error) {
