@@ -4,7 +4,7 @@ go 1.15
 
 require (
 	github.com/containerd/containerd v1.4.1
-	github.com/cpuguy83/dockercfg v0.0.0-20201026193120-7d0f72caaf6a
+	github.com/cpuguy83/dockercfg v0.2.0
 	github.com/golang/protobuf v1.4.2 // indirect
 	github.com/google/go-cmp v0.4.1 // indirect
 	github.com/kr/text v0.2.0 // indirect
