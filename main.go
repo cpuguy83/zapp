@@ -202,6 +202,9 @@ func push(ctx context.Context, resolver *resolverWrapper, ref string, desc v1.De
 		ctx = docker.WithScope(ctx, scope)
 		w, err = pusher.Push(ctx, desc)
 		if err != nil {
+			if errdefs.IsAlreadyExists(err) {
+				return nil
+			}
 			return fmt.Errorf("error starting push: %w", err)
 		}
 	}
