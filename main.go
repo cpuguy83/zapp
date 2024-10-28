@@ -238,12 +238,17 @@ func (r *resolverWrapper) authorize(host string) (string, string, error) {
 	host = dockercfg.ResolveRegistryHost(host)
 	l = l.WithField("host.resolved", host)
 
+	l.Debug("Get registry credentials")
 	u, p, err := dockercfg.GetRegistryCredentials(host)
 	if err != nil && r.err != nil {
 		return "", "", err
 	}
 
 	if p != "" {
+		l.WithField("user", u).Debug("Use user/pass auth")
+		if u == "<token>" {
+			u = ""
+		}
 		r.u = u
 		r.p = p
 		return u, p, nil
